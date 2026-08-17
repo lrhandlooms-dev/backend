@@ -1,5 +1,6 @@
 const Order = require("../models/Order");
 const Product = require("../models/Product");
+const sendEmail = require("../utils/sendEmail");
 
 
 // ==========================================================
@@ -8,404 +9,504 @@ const Product = require("../models/Product");
 // ==========================================================
 
 const createOrder = async (req, res) => {
-  try {
-    const {
-      items,
-      shippingAddress,
-      transactionId,
-    } = req.body;
+    try {
+        const {
+            items,
+            shippingAddress,
+            transactionId,
+        } = req.body;
 
 
-    // ------------------------------------------------------
-    // BASIC VALIDATION
-    // ------------------------------------------------------
+        // ------------------------------------------------------
+        // BASIC VALIDATION
+        // ------------------------------------------------------
 
-    if (
-      !Array.isArray(items) ||
-      !items.length
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "Your cart is empty",
-      });
-    }
-
-
-    if (!shippingAddress) {
-      return res.status(400).json({
-        success: false,
-        message: "Shipping address is required",
-      });
-    }
-
-
-    const {
-      fullName,
-      email,
-      phone,
-      address,
-      city,
-      state,
-      pincode,
-      country,
-    } = shippingAddress;
-
-
-    if (
-      !fullName ||
-      !email ||
-      !phone ||
-      !address ||
-      !city ||
-      !state ||
-      !pincode ||
-      !country
-    ) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Complete shipping address is required",
-      });
-    }
-
-
-    if (!transactionId) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Transaction ID / UTR is required",
-      });
-    }
-
-
-    // ------------------------------------------------------
-    // VALIDATE PRODUCTS FROM DATABASE
-    // ------------------------------------------------------
-
-    const orderItems = [];
-
-    let subtotal = 0;
-
-
-    for (const item of items) {
-
-      const productId =
-        item.product ||
-        item.productId ||
-        item._id ||
-        item.id;
-
-
-      if (!productId) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Invalid product in cart",
-        });
-      }
-
-
-      const product =
-        await Product.findById(
-          productId
-        );
-
-
-      if (!product) {
-        return res.status(404).json({
-          success: false,
-          message:
-            "One of the products in your cart no longer exists",
-        });
-      }
-
-
-      if (
-        product.isActive === false
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            `${product.name} is currently unavailable`,
-        });
-      }
-
-
-      // ----------------------------------------------------
-      // QUANTITY
-      // ----------------------------------------------------
-
-      const quantity =
-        Math.max(
-          1,
-          Number(
-            item.quantity
-          ) || 1
-        );
-
-
-      // ----------------------------------------------------
-      // STOCK CHECK
-      // ----------------------------------------------------
-
-      if (
-        typeof product.stock === "number" &&
-        product.stock < quantity
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            `${product.name} does not have enough stock`,
-        });
-      }
-
-
-      // ----------------------------------------------------
-      // USE DATABASE PRICE
-      // NEVER TRUST FRONTEND PRICE
-      // ----------------------------------------------------
-
-      const price =
-        Number(
-          product.price
-        ) || 0;
-
-
-      const itemTotal =
-        price * quantity;
-
-
-      subtotal +=
-        itemTotal;
-
-
-      // ----------------------------------------------------
-      // IMAGE
-      // ----------------------------------------------------
-
-      let image = "";
-
-
-      if (
-        Array.isArray(
-          product.images
-        ) &&
-        product.images.length
-      ) {
-
-        const mainImage =
-          product.images.find(
-            img =>
-              img &&
-              (
-                img.isMain ||
-                img.main
-              )
-          ) ||
-          product.images[0];
-
-
-        if (typeof mainImage === "string") {
-          image = mainImage;
-        } else if (mainImage) {
-          image =
-            mainImage.url ||
-            mainImage.secure_url ||
-            mainImage.src ||
-            "";
+        if (
+            !Array.isArray(items) ||
+            !items.length
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Your cart is empty",
+            });
         }
 
-      }
+
+        if (!shippingAddress) {
+            return res.status(400).json({
+                success: false,
+                message: "Shipping address is required",
+            });
+        }
 
 
-      // ----------------------------------------------------
-      // ORDER ITEM
-      // ----------------------------------------------------
-
-      orderItems.push({
-
-        product:
-          product._id,
-
-        name:
-          product.name,
-
-        image,
-
-        price,
-
-        quantity,
-
-        total:
-          itemTotal,
-
-      });
-
-    }
-
-
-    // ------------------------------------------------------
-    // SHIPPING
-    // ------------------------------------------------------
-
-    const shippingFee = 0;
-
-
-    const total =
-      subtotal +
-      shippingFee;
-
-
-    // ------------------------------------------------------
-    // ORDER NUMBER
-    // ------------------------------------------------------
-
-    const orderNumber =
-      await generateOrderNumber();
-
-
-    // ------------------------------------------------------
-    // USER
-    // ------------------------------------------------------
-
-    let userId = null;
-
-
-    if (
-      req.user &&
-      req.user._id
-    ) {
-      userId =
-        req.user._id;
-    }
-
-
-    // ------------------------------------------------------
-    // CREATE ORDER
-    // ------------------------------------------------------
-
-    const order =
-      await Order.create({
-
-        orderNumber,
-
-        user:
-          userId,
-
-        customer: {
-
-          name:
+        const {
             fullName,
-
-          email:
             email,
-
-          phone:
             phone,
-
-        },
-
-
-        items:
-          orderItems,
-
-
-        shippingAddress: {
-
-          fullName,
-
-          email,
-
-          phone,
-
-          address,
-
-          city,
-
-          state,
-
-          pincode,
-
-          country,
-
-        },
+            address,
+            city,
+            state,
+            pincode,
+            country,
+        } = shippingAddress;
 
 
-        subtotal,
-
-        shippingFee,
-
-        total,
-
-
-        paymentMethod:
-          "upi",
-
-        paymentStatus:
-          "awaiting",
-
-        transactionId:
-          String(
-            transactionId
-          ).trim(),
-
-        orderStatus:
-          "pending",
-
-      });
+        if (
+            !fullName ||
+            !email ||
+            !phone ||
+            !address ||
+            !city ||
+            !state ||
+            !pincode ||
+            !country
+        ) {
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Complete shipping address is required",
+            });
+        }
 
 
-    // ------------------------------------------------------
-    // RESPONSE
-    // ------------------------------------------------------
-
-    res.status(201).json({
-
-      success: true,
-
-      message:
-        "Order received successfully",
-
-      order: {
-
-        id:
-          order._id,
-
-        orderNumber:
-          order.orderNumber,
-
-        total:
-          order.total,
-
-        paymentStatus:
-          order.paymentStatus,
-
-        orderStatus:
-          order.orderStatus,
-
-      },
-
-    });
+        if (!transactionId) {
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Transaction ID / UTR is required",
+            });
+        }
 
 
-  } catch (error) {
+        // ------------------------------------------------------
+        // VALIDATE PRODUCTS FROM DATABASE
+        // ------------------------------------------------------
 
-    console.error(
-      "Create order error:",
-      error
-    );
+        const orderItems = [];
+
+        let subtotal = 0;
 
 
-    res.status(500).json({
+        for (const item of items) {
 
-      success: false,
+            const productId =
+                item.product ||
+                item.productId ||
+                item._id ||
+                item.id;
 
-      message:
-        "Unable to create order",
 
-    });
+            if (!productId) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Invalid product in cart",
+                });
+            }
 
-  }
+
+            const product =
+                await Product.findById(
+                    productId
+                );
+
+
+            if (!product) {
+                return res.status(404).json({
+                    success: false,
+                    message:
+                        "One of the products in your cart no longer exists",
+                });
+            }
+
+
+            if (
+                product.isActive === false
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        `${product.name} is currently unavailable`,
+                });
+            }
+
+
+            // ----------------------------------------------------
+            // QUANTITY
+            // ----------------------------------------------------
+
+            const quantity =
+                Math.max(
+                    1,
+                    Number(
+                        item.quantity
+                    ) || 1
+                );
+
+
+            // ----------------------------------------------------
+            // STOCK CHECK
+            // ----------------------------------------------------
+
+            if (
+                typeof product.stock === "number" &&
+                product.stock < quantity
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        `${product.name} does not have enough stock`,
+                });
+            }
+
+
+            // ----------------------------------------------------
+            // USE DATABASE PRICE
+            // NEVER TRUST FRONTEND PRICE
+            // ----------------------------------------------------
+
+            const price =
+                Number(
+                    product.price
+                ) || 0;
+
+
+            const itemTotal =
+                price * quantity;
+
+
+            subtotal +=
+                itemTotal;
+
+
+            // ----------------------------------------------------
+            // IMAGE
+            // ----------------------------------------------------
+
+            let image = "";
+
+
+            if (
+                Array.isArray(
+                    product.images
+                ) &&
+                product.images.length
+            ) {
+
+                const mainImage =
+                    product.images.find(
+                        img =>
+                            img &&
+                            (
+                                img.isMain ||
+                                img.main
+                            )
+                    ) ||
+                    product.images[0];
+
+
+                if (typeof mainImage === "string") {
+                    image = mainImage;
+                } else if (mainImage) {
+                    image =
+                        mainImage.url ||
+                        mainImage.secure_url ||
+                        mainImage.src ||
+                        "";
+                }
+
+            }
+
+
+            // ----------------------------------------------------
+            // ORDER ITEM
+            // ----------------------------------------------------
+
+            orderItems.push({
+
+                product:
+                    product._id,
+
+                name:
+                    product.name,
+
+                image,
+
+                price,
+
+                quantity,
+
+                total:
+                    itemTotal,
+
+            });
+
+        }
+
+
+        // ------------------------------------------------------
+        // SHIPPING
+        // ------------------------------------------------------
+
+        const shippingFee = 0;
+
+
+        const total =
+            subtotal +
+            shippingFee;
+
+
+        // ------------------------------------------------------
+        // ORDER NUMBER
+        // ------------------------------------------------------
+
+        const orderNumber =
+            await generateOrderNumber();
+
+
+        // ------------------------------------------------------
+        // USER
+        // ------------------------------------------------------
+
+        let userId = null;
+
+
+        if (
+            req.user &&
+            req.user._id
+        ) {
+            userId =
+                req.user._id;
+        }
+
+
+        // ------------------------------------------------------
+        // CREATE ORDER
+        // ------------------------------------------------------
+
+        const order =
+            await Order.create({
+
+                orderNumber,
+
+                user:
+                    userId,
+
+                customer: {
+
+                    name:
+                        fullName,
+
+                    email:
+                        email,
+
+                    phone:
+                        phone,
+
+                },
+
+
+                items:
+                    orderItems,
+
+
+                shippingAddress: {
+
+                    fullName,
+
+                    email,
+
+                    phone,
+
+                    address,
+
+                    city,
+
+                    state,
+
+                    pincode,
+
+                    country,
+
+                },
+
+
+                subtotal,
+
+                shippingFee,
+
+                total,
+
+
+                paymentMethod:
+                    "upi",
+
+                paymentStatus:
+                    "awaiting",
+
+                transactionId:
+                    String(
+                        transactionId
+                    ).trim(),
+
+                orderStatus:
+                    "pending",
+
+            });
+
+
+        // ======================================================
+        // ORDER RECEIVED EMAIL
+        // ======================================================
+
+        try {
+
+            await sendEmail({
+                to: order.customer.email,
+
+                subject: `Order Received 🎉 — ${order.orderNumber}`,
+
+                html: `
+      <div style="
+        max-width:650px;
+        margin:0 auto;
+        padding:40px 25px;
+        background:#f4f0e8;
+        color:#211f1b;
+        font-family:Arial,sans-serif;
+      ">
+
+        <h1 style="
+          font-family:Georgia,serif;
+          font-weight:400;
+          font-size:36px;
+          margin-bottom:25px;
+        ">
+          Order Received 🎉
+        </h1>
+
+        <p>
+          Dear ${order.customer.name},
+        </p>
+
+        <p>
+          Thank you for choosing
+          <strong>LR Handlooms</strong>.
+          Your order has been received successfully.
+        </p>
+
+        <div style="
+          margin:30px 0;
+          padding:25px;
+          background:#ebe5da;
+        ">
+
+          <p>
+            <strong>Order:</strong>
+            ${order.orderNumber}
+          </p>
+
+          <p>
+            <strong>Total:</strong>
+            ₹${order.total.toLocaleString("en-IN")}
+          </p>
+
+          <p>
+            <strong>Payment:</strong>
+            Awaiting payment confirmation
+          </p>
+
+          <p>
+            <strong>Order Status:</strong>
+            Pending
+          </p>
+
+        </div>
+
+        <p>
+          We have received your payment details and
+          our team will verify the transaction shortly.
+        </p>
+
+        <p>
+          Once your payment is confirmed, you will
+          receive another email.
+        </p>
+
+        <br>
+
+        <p>
+          Warm regards,<br>
+          <strong>LR HANDLOOMS</strong><br>
+          Made in Maniabandha
+        </p>
+
+      </div>
+    `,
+            });
+
+        } catch (emailError) {
+
+            console.error(
+                "Order received email error:",
+                emailError.message
+            );
+
+        }
+
+
+        // ------------------------------------------------------
+        // RESPONSE
+        // ------------------------------------------------------
+
+        res.status(201).json({
+
+            success: true,
+
+            message:
+                "Order received successfully",
+
+            order: {
+
+                id:
+                    order._id,
+
+                orderNumber:
+                    order.orderNumber,
+
+                total:
+                    order.total,
+
+                paymentStatus:
+                    order.paymentStatus,
+
+                orderStatus:
+                    order.orderStatus,
+
+            },
+
+        });
+
+
+    } catch (error) {
+
+        console.error(
+            "Create order error:",
+            error
+        );
+
+
+        res.status(500).json({
+
+            success: false,
+
+            message:
+                "Unable to create order",
+
+        });
+
+    }
 };
 
 
@@ -414,116 +515,116 @@ const createOrder = async (req, res) => {
 // ==========================================================
 
 const generateOrderNumber =
-  async () => {
+    async () => {
 
-    const now =
-      new Date();
-
-
-    const year =
-      now.getFullYear();
+        const now =
+            new Date();
 
 
-    const month =
-      String(
-        now.getMonth() + 1
-      ).padStart(
-        2,
-        "0"
-      );
+        const year =
+            now.getFullYear();
 
 
-    const day =
-      String(
-        now.getDate()
-      ).padStart(
-        2,
-        "0"
-      );
+        const month =
+            String(
+                now.getMonth() + 1
+            ).padStart(
+                2,
+                "0"
+            );
 
 
-    const prefix =
-      `LRH-${year}${month}${day}`;
+        const day =
+            String(
+                now.getDate()
+            ).padStart(
+                2,
+                "0"
+            );
 
 
-    const count =
-      await Order.countDocuments({
-
-        createdAt: {
-
-          $gte:
-            new Date(
-              year,
-              now.getMonth(),
-              now.getDate()
-            ),
-
-          $lt:
-            new Date(
-              year,
-              now.getMonth(),
-              now.getDate() + 1
-            ),
-
-        },
-
-      });
+        const prefix =
+            `LRH-${year}${month}${day}`;
 
 
-    return `${prefix}-${String(
-      count + 1
-    ).padStart(3, "0")}`;
+        const count =
+            await Order.countDocuments({
 
-  };
+                createdAt: {
+
+                    $gte:
+                        new Date(
+                            year,
+                            now.getMonth(),
+                            now.getDate()
+                        ),
+
+                    $lt:
+                        new Date(
+                            year,
+                            now.getMonth(),
+                            now.getDate() + 1
+                        ),
+
+                },
+
+            });
 
 
-  // ==========================================================
+        return `${prefix}-${String(
+            count + 1
+        ).padStart(3, "0")}`;
+
+    };
+
+
+// ==========================================================
 // GET MY ORDERS
 // CUSTOMER
 // ==========================================================
 
 const getMyOrders = async (req, res) => {
-  try {
+    try {
 
-    if (!req.user || !req.user._id) {
-      return res.status(401).json({
-        success: false,
-        message: "Not authorized. Please login.",
-      });
+        if (!req.user || !req.user._id) {
+            return res.status(401).json({
+                success: false,
+                message: "Not authorized. Please login.",
+            });
+        }
+
+
+        const orders = await Order.find({
+            user: req.user._id,
+        })
+            .sort({
+                createdAt: -1,
+            })
+            .lean();
+
+
+        return res.status(200).json({
+            success: true,
+            count: orders.length,
+            orders,
+        });
+
+
+    } catch (error) {
+
+        console.error(
+            "Get my orders error:",
+            error
+        );
+
+
+        return res.status(500).json({
+            success: false,
+            message: "Unable to load your orders",
+            error: error.message,
+        });
+
     }
-
-
-    const orders = await Order.find({
-      user: req.user._id,
-    })
-      .sort({
-        createdAt: -1,
-      })
-      .lean();
-
-
-    return res.status(200).json({
-      success: true,
-      count: orders.length,
-      orders,
-    });
-
-
-  } catch (error) {
-
-    console.error(
-      "Get my orders error:",
-      error
-    );
-
-
-    return res.status(500).json({
-      success: false,
-      message: "Unable to load your orders",
-      error: error.message,
-    });
-
-  }
 };
 
 // ==========================================================
@@ -532,131 +633,131 @@ const getMyOrders = async (req, res) => {
 // ==========================================================
 
 const getOrders =
-  async (req, res) => {
+    async (req, res) => {
 
-    try {
+        try {
 
-      const {
-        paymentStatus,
-        orderStatus,
-        search,
-      } = req.query;
-
-
-      const filter = {};
-
-
-      if (
-        paymentStatus &&
-        paymentStatus !== "all"
-      ) {
-
-        filter.paymentStatus =
-          paymentStatus;
-
-      }
-
-
-      if (
-        orderStatus &&
-        orderStatus !== "all"
-      ) {
-
-        filter.orderStatus =
-          orderStatus;
-
-      }
-
-
-      if (search) {
-
-        filter.$or = [
-
-          {
-            orderNumber: {
-              $regex:
+            const {
+                paymentStatus,
+                orderStatus,
                 search,
-              $options: "i",
-            },
-          },
-
-          {
-            "customer.name": {
-              $regex:
-                search,
-              $options: "i",
-            },
-          },
-
-          {
-            "customer.email": {
-              $regex:
-                search,
-              $options: "i",
-            },
-          },
-
-          {
-            transactionId: {
-              $regex:
-                search,
-              $options: "i",
-            },
-          },
-
-        ];
-
-      }
+            } = req.query;
 
 
-      const orders =
-        await Order.find(
-          filter
-        )
-        .populate(
-          "user",
-          "name email phone"
-        )
-        .populate(
-          "items.product",
-          "name slug price images"
-        )
-        .sort({
-          createdAt: -1,
-        });
+            const filter = {};
 
 
-      res.json({
+            if (
+                paymentStatus &&
+                paymentStatus !== "all"
+            ) {
 
-        success: true,
+                filter.paymentStatus =
+                    paymentStatus;
 
-        count:
-          orders.length,
-
-        orders,
-
-      });
-
-    } catch (error) {
-
-      console.error(
-        "Get orders error:",
-        error
-      );
+            }
 
 
-      res.status(500).json({
+            if (
+                orderStatus &&
+                orderStatus !== "all"
+            ) {
 
-        success: false,
+                filter.orderStatus =
+                    orderStatus;
 
-        message:
-          "Unable to load orders",
+            }
 
-      });
 
-    }
+            if (search) {
 
-  };
+                filter.$or = [
+
+                    {
+                        orderNumber: {
+                            $regex:
+                                search,
+                            $options: "i",
+                        },
+                    },
+
+                    {
+                        "customer.name": {
+                            $regex:
+                                search,
+                            $options: "i",
+                        },
+                    },
+
+                    {
+                        "customer.email": {
+                            $regex:
+                                search,
+                            $options: "i",
+                        },
+                    },
+
+                    {
+                        transactionId: {
+                            $regex:
+                                search,
+                            $options: "i",
+                        },
+                    },
+
+                ];
+
+            }
+
+
+            const orders =
+                await Order.find(
+                    filter
+                )
+                    .populate(
+                        "user",
+                        "name email phone"
+                    )
+                    .populate(
+                        "items.product",
+                        "name slug price images"
+                    )
+                    .sort({
+                        createdAt: -1,
+                    });
+
+
+            res.json({
+
+                success: true,
+
+                count:
+                    orders.length,
+
+                orders,
+
+            });
+
+        } catch (error) {
+
+            console.error(
+                "Get orders error:",
+                error
+            );
+
+
+            res.status(500).json({
+
+                success: false,
+
+                message:
+                    "Unable to load orders",
+
+            });
+
+        }
+
+    };
 
 
 // ==========================================================
@@ -665,66 +766,66 @@ const getOrders =
 // ==========================================================
 
 const getOrder =
-  async (req, res) => {
+    async (req, res) => {
 
-    try {
+        try {
 
-      const order =
-        await Order.findById(
-          req.params.id
-        )
-        .populate(
-          "user",
-          "name email phone"
-        )
-        .populate(
-          "items.product",
-          "name slug price images"
-        );
-
-
-      if (!order) {
-
-        return res.status(404).json({
-
-          success: false,
-
-          message:
-            "Order not found",
-
-        });
-
-      }
+            const order =
+                await Order.findById(
+                    req.params.id
+                )
+                    .populate(
+                        "user",
+                        "name email phone"
+                    )
+                    .populate(
+                        "items.product",
+                        "name slug price images"
+                    );
 
 
-      res.json({
+            if (!order) {
 
-        success: true,
+                return res.status(404).json({
 
-        order,
+                    success: false,
 
-      });
+                    message:
+                        "Order not found",
 
-    } catch (error) {
+                });
 
-      console.error(
-        "Get order error:",
-        error
-      );
+            }
 
 
-      res.status(500).json({
+            res.json({
 
-        success: false,
+                success: true,
 
-        message:
-          "Unable to load order",
+                order,
 
-      });
+            });
 
-    }
+        } catch (error) {
 
-  };
+            console.error(
+                "Get order error:",
+                error
+            );
+
+
+            res.status(500).json({
+
+                success: false,
+
+                message:
+                    "Unable to load order",
+
+            });
+
+        }
+
+    };
 
 
 // ==========================================================
@@ -733,95 +834,191 @@ const getOrder =
 // ==========================================================
 
 const confirmPayment =
-  async (req, res) => {
+    async (req, res) => {
 
-    try {
+        try {
 
-      const order =
-        await Order.findById(
-          req.params.id
-        );
-
-
-      if (!order) {
-
-        return res.status(404).json({
-
-          success: false,
-
-          message:
-            "Order not found",
-
-        });
-
-      }
+            const order =
+                await Order.findById(
+                    req.params.id
+                );
 
 
-      if (
-        order.paymentStatus ===
-        "paid"
-      ) {
+            if (!order) {
 
-        return res.json({
+                return res.status(404).json({
 
-          success: true,
+                    success: false,
 
-          message:
-            "Payment is already confirmed",
+                    message:
+                        "Order not found",
 
-          order,
+                });
 
-        });
-
-      }
+            }
 
 
-      order.paymentStatus =
-        "paid";
+            if (
+                order.paymentStatus ===
+                "paid"
+            ) {
+
+                return res.json({
+
+                    success: true,
+
+                    message:
+                        "Payment is already confirmed",
+
+                    order,
+
+                });
+
+            }
 
 
-      order.paymentConfirmedAt =
-        new Date();
+            order.paymentStatus =
+                "paid";
 
 
-      order.orderStatus =
-        "confirmed";
+            order.paymentConfirmedAt =
+                new Date();
 
 
-      await order.save();
+            order.orderStatus =
+                "confirmed";
 
 
-      res.json({
-
-        success: true,
-
-        message:
-          "Payment confirmed successfully",
-
-        order,
-
-      });
-
-    } catch (error) {
-
-      console.error(
-        "Confirm payment error:",
-        error
-      );
+            await order.save();
 
 
-      res.status(500).json({
+            // ======================================================
+            // PAYMENT CONFIRMED EMAIL
+            // ======================================================
 
-        success: false,
+            try {
 
-        message:
-          "Unable to confirm payment",
+                await sendEmail({
 
-      });
+                    to: order.customer.email,
 
-    }
+                    subject:
+                        `Payment Confirmed ✅ — ${order.orderNumber}`,
 
-  };
+                    html: `
+            <div style="
+                max-width:650px;
+                margin:0 auto;
+                padding:40px 25px;
+                background:#f4f0e8;
+                color:#211f1b;
+                font-family:Arial,sans-serif;
+            ">
+
+                <h1 style="
+                    font-family:Georgia,serif;
+                    font-weight:400;
+                    font-size:36px;
+                ">
+                    Payment Confirmed ✅
+                </h1>
+
+                <p>
+                    Dear ${order.customer.name},
+                </p>
+
+                <p>
+                    Your payment has been successfully verified.
+                    Your order is now confirmed.
+                </p>
+
+                <div style="
+                    margin:30px 0;
+                    padding:25px;
+                    background:#ebe5da;
+                ">
+
+                    <p>
+                        <strong>Order:</strong>
+                        ${order.orderNumber}
+                    </p>
+
+                    <p>
+                        <strong>Amount:</strong>
+                        ₹${order.total.toLocaleString("en-IN")}
+                    </p>
+
+                    <p>
+                        <strong>Payment:</strong>
+                        Confirmed
+                    </p>
+
+                    <p>
+                        <strong>Order Status:</strong>
+                        Confirmed
+                    </p>
+
+                </div>
+
+                <p>
+                    Thank you for choosing LR Handlooms.
+                    We will keep you updated as your order
+                    moves through processing and delivery.
+                </p>
+
+                <br>
+
+                <p>
+                    Warm regards,<br>
+                    <strong>LR HANDLOOMS</strong><br>
+                    Made in Maniabandha
+                </p>
+
+            </div>
+        `,
+                });
+
+            } catch (emailError) {
+
+                console.error(
+                    "Payment confirmation email error:",
+                    emailError.message
+                );
+
+            }
+
+
+            res.json({
+
+                success: true,
+
+                message:
+                    "Payment confirmed successfully",
+
+                order,
+
+            });
+
+        } catch (error) {
+
+            console.error(
+                "Confirm payment error:",
+                error
+            );
+
+
+            res.status(500).json({
+
+                success: false,
+
+                message:
+                    "Unable to confirm payment",
+
+            });
+
+        }
+
+    };
 
 
 // ==========================================================
@@ -830,72 +1027,163 @@ const confirmPayment =
 // ==========================================================
 
 const rejectPayment =
-  async (req, res) => {
+    async (req, res) => {
 
-    try {
+        try {
 
-      const order =
-        await Order.findById(
-          req.params.id
-        );
-
-
-      if (!order) {
-
-        return res.status(404).json({
-
-          success: false,
-
-          message:
-            "Order not found",
-
-        });
-
-      }
+            const order =
+                await Order.findById(
+                    req.params.id
+                );
 
 
-      order.paymentStatus =
-        "rejected";
+            if (!order) {
+
+                return res.status(404).json({
+
+                    success: false,
+
+                    message:
+                        "Order not found",
+
+                });
+
+            }
 
 
-      order.orderStatus =
-        "cancelled";
+            order.paymentStatus =
+                "rejected";
 
 
-      await order.save();
+            order.orderStatus =
+                "cancelled";
 
 
-      res.json({
-
-        success: true,
-
-        message:
-          "Payment rejected",
-
-        order,
-
-      });
-
-    } catch (error) {
-
-      console.error(
-        "Reject payment error:",
-        error
-      );
+            await order.save();
 
 
-      res.status(500).json({
+            // ======================================================
+            // PAYMENT REJECTED EMAIL
+            // ======================================================
 
-        success: false,
+            try {
 
-        message:
-          "Unable to reject payment",
+                await sendEmail({
 
-      });
+                    to: order.customer.email,
 
-    }
+                    subject:
+                        `Payment Verification Update — ${order.orderNumber}`,
 
-  };
+                    html: `
+            <div style="
+                max-width:650px;
+                margin:0 auto;
+                padding:40px 25px;
+                background:#f4f0e8;
+                color:#211f1b;
+                font-family:Arial,sans-serif;
+            ">
+
+                <h1 style="
+                    font-family:Georgia,serif;
+                    font-weight:400;
+                    font-size:36px;
+                ">
+                    Payment Verification Update
+                </h1>
+
+                <p>
+                    Dear ${order.customer.name},
+                </p>
+
+                <p>
+                    We were unable to confirm the payment
+                    for your order.
+                </p>
+
+                <div style="
+                    margin:30px 0;
+                    padding:25px;
+                    background:#ebe5da;
+                ">
+
+                    <p>
+                        <strong>Order:</strong>
+                        ${order.orderNumber}
+                    </p>
+
+                    <p>
+                        <strong>Amount:</strong>
+                        ₹${order.total.toLocaleString("en-IN")}
+                    </p>
+
+                    <p>
+                        <strong>Payment:</strong>
+                        Verification failed
+                    </p>
+
+                </div>
+
+                <p>
+                    If you believe the payment was completed
+                    successfully, please contact LR Handlooms
+                    with your transaction details.
+                </p>
+
+                <br>
+
+                <p>
+                    Warm regards,<br>
+                    <strong>LR HANDLOOMS</strong><br>
+                    Made in Maniabandha
+                </p>
+
+            </div>
+        `,
+                });
+
+            } catch (emailError) {
+
+                console.error(
+                    "Payment rejection email error:",
+                    emailError.message
+                );
+
+            }
+
+
+            res.json({
+
+                success: true,
+
+                message:
+                    "Payment rejected",
+
+                order,
+
+            });
+
+        } catch (error) {
+
+            console.error(
+                "Reject payment error:",
+                error
+            );
+
+
+            res.status(500).json({
+
+                success: false,
+
+                message:
+                    "Unable to reject payment",
+
+            });
+
+        }
+
+    };
 
 
 // ==========================================================
@@ -904,112 +1192,112 @@ const rejectPayment =
 // ==========================================================
 
 const updateOrderStatus =
-  async (req, res) => {
+    async (req, res) => {
 
-    try {
+        try {
 
-      const {
-        status,
-      } = req.body;
-
-
-      const validStatuses = [
-
-        "pending",
-
-        "confirmed",
-
-        "processing",
-
-        "shipped",
-
-        "delivered",
-
-        "cancelled",
-
-      ];
+            const {
+                status,
+            } = req.body;
 
 
-      if (
-        !validStatuses.includes(
-          status
-        )
-      ) {
+            const validStatuses = [
 
-        return res.status(400).json({
+                "pending",
 
-          success: false,
+                "confirmed",
 
-          message:
-            "Invalid order status",
+                "processing",
 
-        });
+                "shipped",
 
-      }
+                "delivered",
 
+                "cancelled",
 
-      const order =
-        await Order.findByIdAndUpdate(
-
-          req.params.id,
-
-          {
-            orderStatus:
-              status,
-          },
-
-          {
-            new: true,
-          }
-
-        );
+            ];
 
 
-      if (!order) {
+            if (
+                !validStatuses.includes(
+                    status
+                )
+            ) {
 
-        return res.status(404).json({
+                return res.status(400).json({
 
-          success: false,
+                    success: false,
 
-          message:
-            "Order not found",
+                    message:
+                        "Invalid order status",
 
-        });
+                });
 
-      }
-
-
-      res.json({
-
-        success: true,
-
-        message:
-          "Order status updated successfully",
-
-        order,
-
-      });
-
-    } catch (error) {
-
-      console.error(
-        "Update order status error:",
-        error
-      );
+            }
 
 
-      res.status(500).json({
+            const order =
+                await Order.findByIdAndUpdate(
 
-        success: false,
+                    req.params.id,
 
-        message:
-          "Unable to update order status",
+                    {
+                        orderStatus:
+                            status,
+                    },
 
-      });
+                    {
+                        new: true,
+                    }
 
-    }
+                );
 
-  };
+
+            if (!order) {
+
+                return res.status(404).json({
+
+                    success: false,
+
+                    message:
+                        "Order not found",
+
+                });
+
+            }
+
+
+            res.json({
+
+                success: true,
+
+                message:
+                    "Order status updated successfully",
+
+                order,
+
+            });
+
+        } catch (error) {
+
+            console.error(
+                "Update order status error:",
+                error
+            );
+
+
+            res.status(500).json({
+
+                success: false,
+
+                message:
+                    "Unable to update order status",
+
+            });
+
+        }
+
+    };
 
 
 // ==========================================================
@@ -1018,59 +1306,63 @@ const updateOrderStatus =
 // ==========================================================
 
 const deleteOrder =
-  async (req, res) => {
+    async (req, res) => {
 
-    try {
+        try {
 
-      const order =
-        await Order.findByIdAndDelete(
-          req.params.id
-        );
-
-
-      if (!order) {
-
-        return res.status(404).json({
-
-          success: false,
-
-          message:
-            "Order not found",
-
-        });
-
-      }
+            const order =
+                await Order.findByIdAndDelete(
+                    req.params.id
+                );
 
 
-      res.json({
+            if (!order) {
 
-        success: true,
+                return res.status(404).json({
 
-        message:
-          "Order deleted successfully",
+                    success: false,
 
-      });
+                    message:
+                        "Order not found",
 
-    } catch (error) {
+                });
 
-      console.error(
-        "Delete order error:",
-        error
-      );
+            }
 
 
-      res.status(500).json({
+            res.json({
 
-        success: false,
+                success: true,
 
-        message:
-          "Unable to delete order",
+                message:
+                    "Order deleted successfully",
 
-      });
+            });
 
-    }
+        } catch (error) {
 
-  };
+            console.error(
+                "Delete order error:",
+                error
+            );
+
+
+            res.status(500).json({
+
+                success: false,
+
+                message:
+                    "Unable to delete order",
+
+            });
+
+        }
+
+    };
+
+
+
+
 
 
 // ==========================================================
@@ -1079,20 +1371,20 @@ const deleteOrder =
 
 module.exports = {
 
-  createOrder,
+    createOrder,
 
-  getOrders,
+    getOrders,
 
-  getMyOrders,
+    getMyOrders,
 
-  getOrder,
+    getOrder,
 
-  confirmPayment,
+    confirmPayment,
 
-  rejectPayment,
+    rejectPayment,
 
-  updateOrderStatus,
+    updateOrderStatus,
 
-  deleteOrder,
+    deleteOrder,
 
 };
