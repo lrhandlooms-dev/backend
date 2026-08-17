@@ -493,20 +493,16 @@ const getMyOrders = async (req, res) => {
     }
 
 
-    const orders =
-      await Order.find({
-        user: req.user._id,
+    const orders = await Order.find({
+      user: req.user._id,
+    })
+      .sort({
+        createdAt: -1,
       })
-        .populate(
-          "items.product",
-          "name slug price images"
-        )
-        .sort({
-          createdAt: -1,
-        });
+      .lean();
 
 
-    res.json({
+    return res.status(200).json({
       success: true,
       count: orders.length,
       orders,
@@ -521,15 +517,14 @@ const getMyOrders = async (req, res) => {
     );
 
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      message:
-        "Unable to load your orders",
+      message: "Unable to load your orders",
+      error: error.message,
     });
 
   }
 };
-
 
 // ==========================================================
 // GET ALL ORDERS
