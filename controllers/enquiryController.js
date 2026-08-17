@@ -15,6 +15,7 @@ const createEnquiry = async (req, res) => {
       message,
       type,
       product,
+      occasionDate,
     } = req.body;
 
     if (!name || !email || !message) {
@@ -25,14 +26,15 @@ const createEnquiry = async (req, res) => {
     }
 
     const enquiry = await Enquiry.create({
-      name,
-      email,
-      phone,
-      subject,
-      message,
-      type: type || "general",
-      product: product || null,
-    });
+  name,
+  email,
+  phone,
+  subject,
+  message,
+  type: type || "general",
+  product: product || null,
+  occasionDate: occasionDate || null,
+});
 
     res.status(201).json({
       success: true,

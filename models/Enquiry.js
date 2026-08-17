@@ -65,6 +65,11 @@ const enquirySchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+
+    occasionDate: {
+  type: Date,
+  default: null,
+},
   },
   {
     timestamps: true,
