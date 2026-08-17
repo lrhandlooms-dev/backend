@@ -3,6 +3,7 @@ const express = require("express");
 const {
   createOrder,
   getOrders,
+  getMyOrders,
   getOrder,
   confirmPayment,
   rejectPayment,
@@ -47,6 +48,18 @@ router.get(
   "/",
   adminProtect,
   getOrders
+);
+
+
+// ==========================================================
+// CUSTOMER
+// GET MY ORDERS
+// ==========================================================
+
+router.get(
+  "/my-orders",
+  userProtect,
+  getMyOrders
 );
 
 

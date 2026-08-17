@@ -477,6 +477,60 @@ const generateOrderNumber =
   };
 
 
+  // ==========================================================
+// GET MY ORDERS
+// CUSTOMER
+// ==========================================================
+
+const getMyOrders = async (req, res) => {
+  try {
+
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({
+        success: false,
+        message: "Not authorized. Please login.",
+      });
+    }
+
+
+    const orders =
+      await Order.find({
+        user: req.user._id,
+      })
+        .populate(
+          "items.product",
+          "name slug price images"
+        )
+        .sort({
+          createdAt: -1,
+        });
+
+
+    res.json({
+      success: true,
+      count: orders.length,
+      orders,
+    });
+
+
+  } catch (error) {
+
+    console.error(
+      "Get my orders error:",
+      error
+    );
+
+
+    res.status(500).json({
+      success: false,
+      message:
+        "Unable to load your orders",
+    });
+
+  }
+};
+
+
 // ==========================================================
 // GET ALL ORDERS
 // ADMIN
@@ -1033,6 +1087,8 @@ module.exports = {
   createOrder,
 
   getOrders,
+
+  getMyOrders,
 
   getOrder,
 
