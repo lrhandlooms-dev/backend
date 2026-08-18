@@ -25,7 +25,7 @@ const sendEmail = async ({
     },
 
     body: JSON.stringify({
-      from: "LR Handlooms <onboarding@resend.dev>",
+      from: "LR Handlooms <orders@lrhandlooms.in>",
       to: [to],
       subject,
       html,
