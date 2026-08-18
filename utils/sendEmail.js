@@ -16,6 +16,9 @@ const sendEmail = async ({
     throw new Error("RESEND_API_KEY is not configured");
   }
 
+  // Support both single email and multiple emails
+  const recipients = Array.isArray(to) ? to : [to];
+
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
 
@@ -26,7 +29,7 @@ const sendEmail = async ({
 
     body: JSON.stringify({
       from: "LR Handlooms <orders@lrhandlooms.in>",
-      to: [to],
+      to: recipients,
       subject,
       html,
     }),
@@ -41,7 +44,7 @@ const sendEmail = async ({
   }
 
   console.log(
-    `Email sent successfully to ${to} | ID: ${data.id}`
+    `Email sent successfully to ${recipients.join(", ")} | ID: ${data.id}`
   );
 
   return data;
