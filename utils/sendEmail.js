@@ -1,26 +1,5 @@
-const nodemailer = require("nodemailer");
-
 // ==========================================================
-// GMAIL SMTP TRANSPORTER
-// ==========================================================
-
-const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 587,
-  secure: false,
-
-  auth: {
-    user: process.env.MAIL_USER,
-    pass: process.env.MAIL_APP_PASSWORD,
-  },
-
-  connectionTimeout: 20000,
-  greetingTimeout: 20000,
-  socketTimeout: 20000,
-});
-
-// ==========================================================
-// SEND EMAIL
+// RESEND EMAIL API
 // ==========================================================
 
 const sendEmail = async ({
@@ -33,12 +12,39 @@ const sendEmail = async ({
     throw new Error("Recipient email is required");
   }
 
-  return transporter.sendMail({
-    from: `"LR Handlooms" <${process.env.MAIL_USER}>`,
-    to,
-    subject,
-    html,
+  if (!process.env.RESEND_API_KEY) {
+    throw new Error("RESEND_API_KEY is not configured");
+  }
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+
+    headers: {
+      "Authorization": `Bearer ${process.env.RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+
+    body: JSON.stringify({
+      from: "LR Handlooms <onboarding@resend.dev>",
+      to: [to],
+      subject,
+      html,
+    }),
   });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data?.message || "Resend email sending failed"
+    );
+  }
+
+  console.log(
+    `Email sent successfully to ${to} | ID: ${data.id}`
+  );
+
+  return data;
 };
 
 module.exports = sendEmail;
