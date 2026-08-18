@@ -15,7 +15,17 @@ const orderRoutes = require("./routes/orderRoutes");
 
 const app = express();
 
-app.use(cors());
+app.use(cors({
+  origin: [
+    "https://admin.lrhandlooms.in",
+    "https://lrhandlooms.in",
+    "https://www.lrhandlooms.in",
+  ],
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+}));
+
+app.options("*", cors());
 app.use(express.json());
 
 
