@@ -461,6 +461,131 @@ const createOrder = async (req, res) => {
         });
 
 
+        // ======================================================
+        // ADMIN NEW ORDER EMAIL
+        // ======================================================
+
+        sendEmail({
+
+            to: process.env.MAIL_USER,
+
+            subject:
+                `🔔 New Order Received — ${order.orderNumber}`,
+
+            html: `
+        <div style="
+            max-width:650px;
+            margin:0 auto;
+            padding:40px 25px;
+            background:#f4f0e8;
+            color:#211f1b;
+            font-family:Arial,sans-serif;
+        ">
+
+            <h1 style="
+                font-family:Georgia,serif;
+                font-weight:400;
+                font-size:36px;
+            ">
+                New Order Received 🔔
+            </h1>
+
+            <p>
+                A new order has been placed on
+                <strong>LR Handlooms</strong>.
+            </p>
+
+            <div style="
+                margin:30px 0;
+                padding:25px;
+                background:#ebe5da;
+            ">
+
+                <p>
+                    <strong>Order:</strong>
+                    ${order.orderNumber}
+                </p>
+
+                <p>
+                    <strong>Customer:</strong>
+                    ${order.customer.name}
+                </p>
+
+                <p>
+                    <strong>Email:</strong>
+                    ${order.customer.email}
+                </p>
+
+                <p>
+                    <strong>Phone:</strong>
+                    ${order.customer.phone}
+                </p>
+
+                <p>
+                    <strong>Total:</strong>
+                    ₹${order.total.toLocaleString("en-IN")}
+                </p>
+
+                <p>
+                    <strong>Payment:</strong>
+                    UPI
+                </p>
+
+                <p>
+                    <strong>Payment Status:</strong>
+                    Awaiting verification
+                </p>
+
+                <p>
+                    <strong>Transaction ID / UTR:</strong>
+                    ${order.transactionId}
+                </p>
+
+                <p>
+                    <strong>Order Status:</strong>
+                    Pending
+                </p>
+
+            </div>
+
+            <h3>Shipping Address</h3>
+
+            <p>
+                ${order.shippingAddress.fullName}<br>
+                ${order.shippingAddress.address}<br>
+                ${order.shippingAddress.city},
+                ${order.shippingAddress.state}
+                - ${order.shippingAddress.pincode}<br>
+                ${order.shippingAddress.country}
+            </p>
+
+            <br>
+
+            <p>
+                Please open the admin panel and verify the payment.
+            </p>
+
+            <br>
+
+            <p>
+                Warm regards,<br>
+                <strong>LR HANDLOOMS</strong><br>
+                Made in Maniabandha
+            </p>
+
+        </div>
+    `,
+
+        }).catch(error => {
+
+            console.error(
+                "Admin new order email error:",
+                error.message
+            );
+
+        });
+
+
         // ------------------------------------------------------
         // RESPONSE
         // ------------------------------------------------------
