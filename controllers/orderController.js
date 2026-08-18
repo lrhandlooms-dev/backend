@@ -1051,8 +1051,10 @@ const confirmPayment =
 
             sendEmail({
 
-                to:
+                to: [
                     order.customer.email,
+                    process.env.MAIL_USER,
+                ],
 
                 subject:
                     `Payment Confirmed ✅ — ${order.orderNumber}`,
