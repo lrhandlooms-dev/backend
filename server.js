@@ -22,7 +22,11 @@ app.use(cors({
     "https://www.lrhandlooms.in",
   ],
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
+  allowedHeaders: [
+  "Content-Type",
+  "Authorization",
+  "Cache-Control",
+],
 }));
 
 app.use(express.json());
