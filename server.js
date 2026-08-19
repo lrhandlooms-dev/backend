@@ -26,6 +26,7 @@ app.use(cors({
   "Content-Type",
   "Authorization",
   "Cache-Control",
+  "Pragma",
 ],
 }));
 
